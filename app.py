@@ -224,6 +224,7 @@ def extrair_dados_ceasa():
         selects = soup.find_all('select')
         logger.info(f"Número de selects encontrados após selecionar mercado: {len(selects)}")
         
+        # Verificar se há pelo menos 2 selects (mercado e data)
         if len(selects) < 2:
             # Tentar encontrar o select de datas de outra forma
             selects_by_name = soup.find_all('select', {'name': lambda x: x and 'data' in x.lower()})
@@ -239,17 +240,27 @@ def extrair_dados_ceasa():
         data_param = data_select.get('name')
         logger.info(f"Select de data encontrado: {data_param}")
         
-        # Obter a primeira data (mais recente)
+        # Obter todas as opções de data
         data_options = data_select.find_all('option')
         logger.info(f"Número de opções de data encontradas: {len(data_options)}")
         
-        if len(data_options) < 2:  # Ignorar a primeira opção (geralmente é um placeholder)
+        # CORREÇÃO: Verificar se há pelo menos 1 opção (não 2)
+        # Algumas vezes a primeira opção já é uma data válida, não um placeholder
+        if len(data_options) < 1:
             logger.error("Nenhuma data disponível")
             # Usar dados de exemplo em caso de falha
             return usar_dados_exemplo()
         
-        data_value = data_options[1].get('value')
-        data_text = data_options[1].text.strip()
+        # CORREÇÃO: Verificar se a primeira opção é um placeholder ou uma data válida
+        primeira_opcao = data_options[0].text.strip()
+        if "selecione" in primeira_opcao.lower() and len(data_options) > 1:
+            # Se a primeira opção for um placeholder, usar a segunda opção
+            data_value = data_options[1].get('value')
+            data_text = data_options[1].text.strip()
+        else:
+            # Se a primeira opção já for uma data válida, usá-la
+            data_value = data_options[0].get('value')
+            data_text = data_options[0].text.strip()
         
         logger.info(f"Data selecionada: {data_text}")
         
@@ -296,7 +307,8 @@ def extrair_dados_ceasa():
         
         logger.info(f"Enviando formulário: método={form_method}, action={form_action}, data={form_data}")
         
-        # Enviar o formulário final
+        # CORREÇÃO: Tentar diferentes abordagens para obter a tabela de preços
+        # Abordagem 1: Enviar o formulário normalmente
         if form_method == 'get':
             response = session.get(form_action, params=form_data)
         else:
@@ -306,11 +318,24 @@ def extrair_dados_ceasa():
         with open(os.path.join(DATA_DIR, "debug_page_3.html"), "w", encoding="utf-8") as f:
             f.write(response.text)
         
-        # Passo 4: Extrair os dados da tabela
+        # Verificar se a resposta contém uma tabela de preços
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Encontrar todas as tabelas
         tables = soup.find_all('table')
+        
+        # Se não encontrou tabelas ou encontrou poucas, tentar abordagem alternativa
+        if len(tables) < 3:
+            logger.info("Tentando abordagem alternativa para obter a tabela de preços")
+            
+            # Abordagem 2: Acessar diretamente a URL do boletim completo
+            boletim_url = "http://200.198.51.71/detec/boletim_completo_es/boletim_completo_es.php"
+            response = session.get(boletim_url)
+            
+            # Salvar o HTML para depuração
+            with open(os.path.join(DATA_DIR, "debug_page_4.html"), "w", encoding="utf-8") as f:
+                f.write(response.text)
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            tables = soup.find_all('table')
         
         logger.info(f"Número de tabelas encontradas: {len(tables)}")
         
@@ -336,10 +361,18 @@ def extrair_dados_ceasa():
         
         logger.info(f"Processando {len(rows)} linhas da tabela principal")
         
-        # Pular a primeira linha (cabeçalho)
-        for row in rows[1:]:
+        # CORREÇÃO: Melhorar a extração de dados da tabela
+        # Verificar se a primeira linha é um cabeçalho
+        primeira_linha = rows[0].text.strip().lower()
+        tem_cabecalho = "produto" in primeira_linha or "embalagem" in primeira_linha
+        
+        # Determinar o índice inicial para pular o cabeçalho se existir
+        inicio = 1 if tem_cabecalho else 0
+        
+        for row in rows[inicio:]:
             cols = row.find_all('td')
             
+            # Verificar se há células suficientes
             if len(cols) >= 5:
                 produto = cols[0].text.strip()
                 
@@ -373,9 +406,10 @@ def extrair_dados_ceasa():
         for produto in produtos:
             # Verificar se os campos de preço são numéricos
             try:
-                preco_min = float(produto['Preco_Min'].replace(',', '.'))
-                preco_medio = float(produto['Preco_Medio'].replace(',', '.'))
-                preco_max = float(produto['Preco_Max'].replace(',', '.'))
+                # Substituir vírgula por ponto e remover espaços
+                preco_min = float(produto['Preco_Min'].replace(',', '.').strip())
+                preco_medio = float(produto['Preco_Medio'].replace(',', '.').strip())
+                preco_max = float(produto['Preco_Max'].replace(',', '.').strip())
                 
                 # Se chegou aqui, os preços são válidos
                 produto['Preco_Min'] = preco_min
@@ -384,6 +418,7 @@ def extrair_dados_ceasa():
                 produtos_filtrados.append(produto)
             except (ValueError, TypeError):
                 # Ignorar produtos com preços não numéricos
+                logger.warning(f"Produto ignorado (preço não numérico): {produto['Produto']}")
                 continue
         
         logger.info(f"Número de produtos válidos após filtragem: {len(produtos_filtrados)}")
