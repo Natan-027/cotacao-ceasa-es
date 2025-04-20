@@ -13,6 +13,7 @@ from fpdf import FPDF
 import requests
 from bs4 import BeautifulSoup
 import traceback
+import re
 
 app = Flask(__name__)
 
@@ -75,7 +76,7 @@ inicializar_banco_dados()
 def executar_extracao():
     try:
         logger.info("Iniciando extração de dados...")
-        resultado = extrair_dados_ceasa()
+        resultado = extrair_dados_ceasa_direto()
         if resultado:
             logger.info(f"Extração concluída com sucesso. {resultado['quantidade_produtos']} produtos extraídos.")
             return True
@@ -145,198 +146,54 @@ DADOS_EXEMPLO = [
     {"Produto": "Batata", "Unidade": "Kg", "Preco_Min": 2.0, "Preco_Medio": 2.5, "Preco_Max": 3.0}
 ]
 
-# Nova função para extrair dados usando requests e BeautifulSoup (sem Selenium)
-def extrair_dados_ceasa():
+# NOVA FUNÇÃO: Acessa diretamente o boletim completo sem depender da seleção de datas
+def extrair_dados_ceasa_direto():
     """
-    Acessa o site do CEASA, seleciona o mercado CEASA GRANDE VITÓRIA,
-    escolhe a data mais recente e extrai os dados da tabela de preços.
-    Usa requests e BeautifulSoup em vez de Selenium.
+    Acessa diretamente o boletim completo do CEASA sem depender da seleção de datas.
+    Esta abordagem é mais robusta e menos propensa a falhas.
     """
-    # URL do site do CEASA
-    url = "http://200.198.51.71/detec/filtro_boletim_es/filtro_boletim_es.php"
-    
     try:
-        # Sessão para manter cookies
+        # URL do boletim completo (acesso direto)
+        url = "http://200.198.51.71/detec/boletim_completo_es/boletim_completo_es.php"
+        
+        # Fazer a requisição
         session = requests.Session()
-        
-        # Passo 1: Acessar a página inicial para obter os mercados disponíveis
         response = session.get(url)
-        soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Salvar o HTML para depuração
-        with open(os.path.join(DATA_DIR, "debug_page_1.html"), "w", encoding="utf-8") as f:
-            f.write(response.text)
-        
-        # Encontrar o formulário
-        form = soup.find('form')
-        if not form:
-            logger.error("Formulário não encontrado na página")
-            # Usar dados de exemplo em caso de falha
+        # Verificar se a requisição foi bem-sucedida
+        if response.status_code != 200:
+            logger.error(f"Erro ao acessar o boletim completo. Status code: {response.status_code}")
             return usar_dados_exemplo()
         
-        # Encontrar todos os selects
-        selects = form.find_all('select')
-        if not selects:
-            # Tentar encontrar selects em toda a página
-            selects = soup.find_all('select')
-            
-        if not selects:
-            logger.error("Nenhum select encontrado na página")
-            # Usar dados de exemplo em caso de falha
-            return usar_dados_exemplo()
-        
-        # Obter o nome do parâmetro do select de mercado
-        mercado_select = selects[0]
-        mercado_param = mercado_select.get('name')
-        
-        logger.info(f"Select de mercado encontrado: {mercado_param}")
-        
-        # Encontrar a opção CEASA GRANDE VITÓRIA
-        mercado_value = None
-        for option in mercado_select.find_all('option'):
-            logger.info(f"Opção encontrada: {option.text}")
-            if "CEASA GRANDE VITÓRIA" in option.text:
-                mercado_value = option.get('value')
-                break
-        
-        if not mercado_value:
-            # Tentar encontrar qualquer opção válida
-            options = mercado_select.find_all('option')
-            if options and len(options) > 1:
-                mercado_value = options[1].get('value')
-                logger.info(f"Usando opção alternativa: {options[1].text}")
-            else:
-                logger.error("Nenhuma opção válida encontrada no select de mercado")
-                # Usar dados de exemplo em caso de falha
-                return usar_dados_exemplo()
-        
-        # Passo 2: Enviar o mercado selecionado para obter as datas disponíveis
-        form_data = {mercado_param: mercado_value}
-        logger.info(f"Enviando formulário com mercado: {form_data}")
-        response = session.post(url, data=form_data)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
         # Salvar o HTML para depuração
-        with open(os.path.join(DATA_DIR, "debug_page_2.html"), "w", encoding="utf-8") as f:
+        with open(os.path.join(DATA_DIR, "debug_boletim_completo.html"), "w", encoding="utf-8") as f:
             f.write(response.text)
         
-        # Encontrar o select de datas
-        selects = soup.find_all('select')
-        logger.info(f"Número de selects encontrados após selecionar mercado: {len(selects)}")
-        
-        # Verificar se há pelo menos 2 selects (mercado e data)
-        if len(selects) < 2:
-            # Tentar encontrar o select de datas de outra forma
-            selects_by_name = soup.find_all('select', {'name': lambda x: x and 'data' in x.lower()})
-            if selects_by_name:
-                data_select = selects_by_name[0]
-            else:
-                logger.error(f"Select de data não encontrado. Número de selects: {len(selects)}")
-                # Usar dados de exemplo em caso de falha
-                return usar_dados_exemplo()
-        else:
-            data_select = selects[1]
-        
-        data_param = data_select.get('name')
-        logger.info(f"Select de data encontrado: {data_param}")
-        
-        # Obter todas as opções de data
-        data_options = data_select.find_all('option')
-        logger.info(f"Número de opções de data encontradas: {len(data_options)}")
-        
-        # CORREÇÃO: Verificar se há pelo menos 1 opção (não 2)
-        # Algumas vezes a primeira opção já é uma data válida, não um placeholder
-        if len(data_options) < 1:
-            logger.error("Nenhuma data disponível")
-            # Usar dados de exemplo em caso de falha
-            return usar_dados_exemplo()
-        
-        # CORREÇÃO: Verificar se a primeira opção é um placeholder ou uma data válida
-        primeira_opcao = data_options[0].text.strip()
-        if "selecione" in primeira_opcao.lower() and len(data_options) > 1:
-            # Se a primeira opção for um placeholder, usar a segunda opção
-            data_value = data_options[1].get('value')
-            data_text = data_options[1].text.strip()
-        else:
-            # Se a primeira opção já for uma data válida, usá-la
-            data_value = data_options[0].get('value')
-            data_text = data_options[0].text.strip()
-        
-        logger.info(f"Data selecionada: {data_text}")
-        
-        # Passo 3: Enviar o formulário com mercado e data para obter a tabela de preços
-        form_data = {
-            mercado_param: mercado_value,
-            data_param: data_value
-        }
-        
-        # Encontrar o botão OK e seu parâmetro
-        links = soup.find_all('a')
-        ok_param = None
-        ok_value = None
-        
-        for link in links:
-            if link.text.strip().lower() == "ok":
-                href = link.get('href', '')
-                if 'javascript:' in href:
-                    # Extrair o nome da função JavaScript
-                    js_func = href.split('javascript:')[1].split('(')[0].strip()
-                    # Procurar por inputs hidden que possam conter o parâmetro
-                    hidden_inputs = form.find_all('input', {'type': 'hidden'})
-                    for hidden in hidden_inputs:
-                        if js_func in hidden.get('onclick', ''):
-                            ok_param = hidden.get('name')
-                            ok_value = hidden.get('value', '1')
-                            break
-        
-        if ok_param:
-            form_data[ok_param] = ok_value
-        
-        # Método alternativo: tentar simular o clique no botão OK
-        # Analisar o formulário para encontrar o método de submissão correto
-        form_method = form.get('method', 'post').lower()
-        form_action = form.get('action', url)
-        
-        if form_action:
-            if not form_action.startswith('http'):
-                # URL relativa, construir URL completa
-                base_url = url.rsplit('/', 1)[0]
-                form_action = f"{base_url}/{form_action}"
-        else:
-            form_action = url
-        
-        logger.info(f"Enviando formulário: método={form_method}, action={form_action}, data={form_data}")
-        
-        # CORREÇÃO: Tentar diferentes abordagens para obter a tabela de preços
-        # Abordagem 1: Enviar o formulário normalmente
-        if form_method == 'get':
-            response = session.get(form_action, params=form_data)
-        else:
-            response = session.post(form_action, data=form_data)
-        
-        # Salvar o HTML para depuração
-        with open(os.path.join(DATA_DIR, "debug_page_3.html"), "w", encoding="utf-8") as f:
-            f.write(response.text)
-        
-        # Verificar se a resposta contém uma tabela de preços
+        # Analisar o HTML
         soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Extrair a data da pesquisa
+        data_pesquisa = "Data não encontrada"
+        data_tag = soup.find(string=re.compile("Data Pesquisada:"))
+        if data_tag:
+            data_match = re.search(r'Data Pesquisada:\s*(\d{2}/\d{2}/\d{4})', data_tag.parent.text)
+            if data_match:
+                data_pesquisa = data_match.group(1)
+        
+        # Se não encontrou a data no formato esperado, tentar outros formatos
+        if data_pesquisa == "Data não encontrada":
+            # Procurar qualquer texto que pareça uma data
+            date_pattern = re.compile(r'\d{2}/\d{2}/\d{4}')
+            for tag in soup.find_all(text=date_pattern):
+                data_match = date_pattern.search(tag)
+                if data_match:
+                    data_pesquisa = data_match.group(0)
+                    break
+        
+        logger.info(f"Data da pesquisa encontrada: {data_pesquisa}")
+        
+        # Encontrar todas as tabelas
         tables = soup.find_all('table')
-        
-        # Se não encontrou tabelas ou encontrou poucas, tentar abordagem alternativa
-        if len(tables) < 3:
-            logger.info("Tentando abordagem alternativa para obter a tabela de preços")
-            
-            # Abordagem 2: Acessar diretamente a URL do boletim completo
-            boletim_url = "http://200.198.51.71/detec/boletim_completo_es/boletim_completo_es.php"
-            response = session.get(boletim_url)
-            
-            # Salvar o HTML para depuração
-            with open(os.path.join(DATA_DIR, "debug_page_4.html"), "w", encoding="utf-8") as f:
-                f.write(response.text)
-            
-            soup = BeautifulSoup(response.text, 'html.parser')
-            tables = soup.find_all('table')
-        
         logger.info(f"Número de tabelas encontradas: {len(tables)}")
         
         # Encontrar a tabela principal (geralmente a que contém mais linhas)
@@ -352,8 +209,14 @@ def extrair_dados_ceasa():
         
         if not main_table or max_rows <= 1:
             logger.error("Tabela de preços não encontrada ou vazia")
-            # Usar dados de exemplo em caso de falha
-            return usar_dados_exemplo()
+            # Tentar abordagem alternativa: procurar por tabelas com células específicas
+            for table in tables:
+                if table.find(string=re.compile("PRODUTO|UNIDADE|MIN|MAX", re.IGNORECASE)):
+                    main_table = table
+                    break
+            
+            if not main_table:
+                return usar_dados_exemplo()
         
         # Extrair os dados da tabela
         produtos = []
@@ -361,15 +224,8 @@ def extrair_dados_ceasa():
         
         logger.info(f"Processando {len(rows)} linhas da tabela principal")
         
-        # CORREÇÃO: Melhorar a extração de dados da tabela
-        # Verificar se a primeira linha é um cabeçalho
-        primeira_linha = rows[0].text.strip().lower()
-        tem_cabecalho = "produto" in primeira_linha or "embalagem" in primeira_linha
-        
-        # Determinar o índice inicial para pular o cabeçalho se existir
-        inicio = 1 if tem_cabecalho else 0
-        
-        for row in rows[inicio:]:
+        # ABORDAGEM 1: Tentar extrair dados baseado em células da tabela
+        for row in rows:
             cols = row.find_all('td')
             
             # Verificar se há células suficientes
@@ -380,17 +236,43 @@ def extrair_dados_ceasa():
                 cabecalhos = ["produtos", "embalagem", "min", "m.c.", "max", "situação"]
                 if produto and produto.lower() not in cabecalhos:
                     unidade = cols[1].text.strip()
-                    preco_min = cols[2].text.strip()
-                    preco_medio = cols[3].text.strip()
-                    preco_max = cols[4].text.strip()
+                    preco_min_text = cols[2].text.strip()
+                    preco_medio_text = cols[3].text.strip()
+                    preco_max_text = cols[4].text.strip()
                     
                     # Adicionar à lista de produtos
                     produtos.append({
                         'Produto': produto,
                         'Unidade': unidade,
-                        'Preco_Min': preco_min,
-                        'Preco_Medio': preco_medio,
-                        'Preco_Max': preco_max
+                        'Preco_Min': preco_min_text,
+                        'Preco_Medio': preco_medio_text,
+                        'Preco_Max': preco_max_text
+                    })
+        
+        # Se não encontrou produtos com a abordagem 1, tentar abordagem 2
+        if not produtos:
+            logger.info("Tentando abordagem alternativa para extrair produtos")
+            
+            # ABORDAGEM 2: Procurar por linhas que contenham padrões de produto e preço
+            for row in rows:
+                row_text = row.get_text().strip()
+                
+                # Procurar padrões como "PRODUTO UNIDADE PREÇO PREÇO PREÇO"
+                # Exemplo: "ABACATE KG 5.00 6.00 7.00"
+                match = re.search(r'([A-ZÀ-Ú\s]+)\s+(KG|UNID|CX|DZ|ENG|MC)\s+(\d+[.,]?\d*)\s+(\d+[.,]?\d*)\s+(\d+[.,]?\d*)', row_text)
+                if match:
+                    produto = match.group(1).strip()
+                    unidade = match.group(2).strip()
+                    preco_min_text = match.group(3).strip()
+                    preco_medio_text = match.group(4).strip()
+                    preco_max_text = match.group(5).strip()
+                    
+                    produtos.append({
+                        'Produto': produto,
+                        'Unidade': unidade,
+                        'Preco_Min': preco_min_text,
+                        'Preco_Medio': preco_medio_text,
+                        'Preco_Max': preco_max_text
                     })
         
         logger.info(f"Número de produtos extraídos: {len(produtos)}")
@@ -398,7 +280,6 @@ def extrair_dados_ceasa():
         # Verificar se temos produtos
         if not produtos:
             logger.error("Nenhum produto encontrado na tabela")
-            # Usar dados de exemplo em caso de falha
             return usar_dados_exemplo()
         
         # Filtrar produtos inválidos (como cabeçalhos ou linhas vazias)
@@ -407,36 +288,71 @@ def extrair_dados_ceasa():
             # Verificar se os campos de preço são numéricos
             try:
                 # Substituir vírgula por ponto e remover espaços
-                preco_min = float(produto['Preco_Min'].replace(',', '.').strip())
-                preco_medio = float(produto['Preco_Medio'].replace(',', '.').strip())
-                preco_max = float(produto['Preco_Max'].replace(',', '.').strip())
+                preco_min_text = produto['Preco_Min'].replace(',', '.').strip()
+                preco_medio_text = produto['Preco_Medio'].replace(',', '.').strip()
+                preco_max_text = produto['Preco_Max'].replace(',', '.').strip()
+                
+                # Converter para float
+                preco_min = float(preco_min_text)
+                preco_medio = float(preco_medio_text)
+                preco_max = float(preco_max_text)
                 
                 # Se chegou aqui, os preços são válidos
                 produto['Preco_Min'] = preco_min
                 produto['Preco_Medio'] = preco_medio
                 produto['Preco_Max'] = preco_max
                 produtos_filtrados.append(produto)
-            except (ValueError, TypeError):
+            except (ValueError, TypeError) as e:
                 # Ignorar produtos com preços não numéricos
-                logger.warning(f"Produto ignorado (preço não numérico): {produto['Produto']}")
+                logger.warning(f"Produto ignorado (preço não numérico): {produto['Produto']} - {str(e)}")
                 continue
         
         logger.info(f"Número de produtos válidos após filtragem: {len(produtos_filtrados)}")
         
+        # Se não temos produtos válidos após a filtragem, tentar extrair de outra forma
         if not produtos_filtrados:
-            logger.error("Nenhum produto válido após filtragem")
-            # Usar dados de exemplo em caso de falha
+            # ABORDAGEM 3: Extrair diretamente do texto da página
+            logger.info("Tentando extrair produtos diretamente do texto da página")
+            
+            # Obter todo o texto da página
+            page_text = soup.get_text()
+            
+            # Procurar padrões de produto e preço no texto completo
+            # Exemplo: "ABACATE KG 5.00 6.00 7.00"
+            pattern = r'([A-ZÀ-Ú\s]+)\s+(KG|UNID|CX|DZ|ENG|MC)\s+(\d+[.,]?\d*)\s+(\d+[.,]?\d*)\s+(\d+[.,]?\d*)'
+            matches = re.finditer(pattern, page_text)
+            
+            for match in matches:
+                produto = match.group(1).strip()
+                unidade = match.group(2).strip()
+                preco_min = float(match.group(3).replace(',', '.'))
+                preco_medio = float(match.group(4).replace(',', '.'))
+                preco_max = float(match.group(5).replace(',', '.'))
+                
+                produtos_filtrados.append({
+                    'Produto': produto,
+                    'Unidade': unidade,
+                    'Preco_Min': preco_min,
+                    'Preco_Medio': preco_medio,
+                    'Preco_Max': preco_max
+                })
+            
+            logger.info(f"Número de produtos extraídos diretamente do texto: {len(produtos_filtrados)}")
+        
+        # Se ainda não temos produtos, usar dados de exemplo
+        if not produtos_filtrados:
+            logger.error("Nenhum produto válido após todas as tentativas de extração")
             return usar_dados_exemplo()
         
         # Criar um DataFrame com os dados filtrados
         df = pd.DataFrame(produtos_filtrados)
         
         # Adicionar informações de data e mercado
-        df['Data_Pesquisa'] = data_text
+        df['Data_Pesquisa'] = data_pesquisa
         df['Mercado'] = "CEASA GRANDE VITÓRIA"
         
         # Salvar no banco de dados
-        salvar_no_banco(produtos_filtrados, data_text, "CEASA GRANDE VITÓRIA")
+        salvar_no_banco(produtos_filtrados, data_pesquisa, "CEASA GRANDE VITÓRIA")
         
         # Gerar nome do arquivo com a data atual
         data_atual = datetime.now().strftime("%Y-%m-%d")
@@ -447,11 +363,11 @@ def extrair_dados_ceasa():
         df.to_csv(nome_arquivo_csv, index=False, encoding='utf-8')
         df.to_json(nome_arquivo_json, orient='records', force_ascii=False)
         
-        logger.info(f"Dados extraídos com sucesso para a data {data_text}")
+        logger.info(f"Dados extraídos com sucesso para a data {data_pesquisa}")
         logger.info(f"Arquivos salvos em: {nome_arquivo_csv} e {nome_arquivo_json}")
         
         return {
-            'data_pesquisa': data_text,
+            'data_pesquisa': data_pesquisa,
             'arquivo_csv': nome_arquivo_csv,
             'arquivo_json': nome_arquivo_json,
             'quantidade_produtos': len(produtos_filtrados)
@@ -460,7 +376,6 @@ def extrair_dados_ceasa():
     except Exception as e:
         logger.error(f"Erro ao extrair dados: {str(e)}")
         logger.error(traceback.format_exc())
-        # Usar dados de exemplo em caso de falha
         return usar_dados_exemplo()
 
 # Função para usar dados de exemplo quando a extração falhar
