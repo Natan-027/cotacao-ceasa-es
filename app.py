@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, send_from_directory
+from flask import Flask, render_template, jsonify, send_from_directory, redirect
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -145,7 +145,8 @@ def obter_cotacoes_ceasa(mercado_id=211, data=None):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    # Redirecionar para a página Wix em vez de tentar renderizar um template
+    return redirect('/wix')
 
 @app.route('/wix')
 def wix_embed():
