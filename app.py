@@ -25,13 +25,10 @@ def cache_expirado():
     tempo_atual = time.time()
     return (tempo_atual - cache['ultima_atualizacao']) > cache['tempo_expiracao']
 
-def obter_cotacoes_ceasa(mercado_id=211, data=None):
+def obter_cotacoes_ceasa():
     """
-    Obtém as cotações do CEASA-ES para o mercado e data especificados usando simulação de interação por teclado.
-    
-    Args:
-        mercado_id: ID do mercado (211 = CEASA GRANDE VITÓRIA)
-        data: Data no formato DD/MM/AAAA (se None, usa a data mais recente disponível)
+    Obtém as cotações do CEASA-ES para o CEASA GRANDE VITÓRIA usando requisições HTTP diretas.
+    Esta abordagem não depende de simulação de interação por teclado.
     
     Returns:
         DataFrame com as cotações ou None em caso de erro
@@ -41,26 +38,33 @@ def obter_cotacoes_ceasa(mercado_id=211, data=None):
         return cache['dados']
     
     try:
-        # URL base do sistema CEASA-ES
-        base_url = "http://200.198.51.71/detec/filtro_boletim_es/"
-        
-        # Etapa 1: Acessar a página de filtro
+        # Configurar a sessão com headers que simulam um navegador
         session = requests.Session()
-        response = session.get(base_url, timeout=10)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Cache-Control': 'max-age=0'
+        }
+        session.headers.update(headers)
+        
+        # Etapa 1: Acessar a página inicial para obter cookies e sessão
+        base_url = "http://200.198.51.71/detec/filtro_boletim_es/"
+        response = session.get(base_url, timeout=15)
         response.raise_for_status()
         
-        # Etapa 2: Simular a interação por teclado para selecionar o mercado e a data
-        # Primeiro, enviamos um POST para simular o Tab e seta para baixo para selecionar CEASA GRANDE VITÓRIA
+        # Etapa 2: Enviar POST para selecionar o mercado (CEASA GRANDE VITÓRIA)
         mercado_data = {
             "hdn_operacao": "filtro",
             "sel_mercado": "211"  # ID do CEASA GRANDE VITÓRIA
         }
         
-        response = session.post(f"{base_url}filtro_boletim_es.php", data=mercado_data, timeout=10)
+        response = session.post(f"{base_url}filtro_boletim_es.php", data=mercado_data, timeout=15)
         response.raise_for_status()
         
-        # Etapa 3: Simular o Tab e seta para baixo para selecionar a data mais recente
-        # Extrair a data mais recente disponível
+        # Etapa 3: Extrair a data mais recente disponível
         soup = BeautifulSoup(response.text, 'html.parser')
         select_data = soup.find('select', {'name': 'sel_data'})
         
@@ -71,10 +75,10 @@ def obter_cotacoes_ceasa(mercado_id=211, data=None):
                 data_mais_recente = opcoes[1].get('value', '').strip()
         
         if not data_mais_recente:
-            # Se não conseguir obter a data, retornar None (sem dados de exemplo)
+            print("Não foi possível obter a data mais recente")
             return None
         
-        # Etapa 4: Enviar o formulário com a data selecionada
+        # Etapa 4: Enviar POST com a data selecionada
         data_data = {
             "hdn_operacao": "filtro",
             "hdn_mercado": "211",  # ID do CEASA GRANDE VITÓRIA
@@ -82,12 +86,13 @@ def obter_cotacoes_ceasa(mercado_id=211, data=None):
             "sel_data": data_mais_recente
         }
         
-        response = session.post(f"{base_url}filtro_boletim_es.php", data=data_data, timeout=10)
+        response = session.post(f"{base_url}filtro_boletim_es.php", data=data_data, timeout=15)
         response.raise_for_status()
         
-        # Etapa 5: Acessar a página do boletim completo
+        # Etapa 5: Acessar diretamente a página do boletim completo
+        # Esta URL é acessada após clicar em "Ok" no formulário
         boletim_url = "http://200.198.51.71/detec/boletim_completo_es/boletim_completo_es.php"
-        response = session.get(boletim_url, timeout=10)
+        response = session.get(boletim_url, timeout=15)
         response.raise_for_status()
         
         # Etapa 6: Extrair os dados da tabela
@@ -97,7 +102,7 @@ def obter_cotacoes_ceasa(mercado_id=211, data=None):
         tabela = soup.find('table', {'class': 'tabela'})
         
         if not tabela:
-            # Se não conseguir encontrar a tabela, retornar None (sem dados de exemplo)
+            print("Tabela não encontrada na página")
             return None
         
         # Extrair os dados da tabela
@@ -125,6 +130,11 @@ def obter_cotacoes_ceasa(mercado_id=211, data=None):
                     'classificacao': classificacao
                 })
         
+        # Verificar se obtivemos dados
+        if not dados:
+            print("Nenhum dado encontrado na tabela")
+            return None
+            
         # Criar DataFrame
         df = pd.DataFrame(dados)
         
@@ -136,6 +146,7 @@ def obter_cotacoes_ceasa(mercado_id=211, data=None):
         cache['dados'] = df
         cache['ultima_atualizacao'] = time.time()
         
+        print(f"Dados obtidos com sucesso: {len(df)} produtos")
         return df
     
     except Exception as e:
@@ -232,6 +243,38 @@ def api_tabela_html():
     """
     
     return html_completo
+
+@app.route('/debug')
+def debug_info():
+    """Rota para depuração que tenta obter os dados e retorna informações detalhadas"""
+    try:
+        # Tentar obter os dados
+        df = obter_cotacoes_ceasa()
+        
+        # Preparar resposta de depuração
+        debug_info = {
+            'status': 'success' if df is not None and not df.empty else 'error',
+            'timestamp': datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+            'cache_status': {
+                'cache_ativo': cache['dados'] is not None,
+                'ultima_atualizacao': datetime.fromtimestamp(cache['ultima_atualizacao']).strftime('%d/%m/%Y %H:%M:%S') if cache['ultima_atualizacao'] else None,
+                'tempo_expiracao': cache['tempo_expiracao'],
+                'expirado': cache_expirado()
+            },
+            'dados': {
+                'obtidos': df is not None,
+                'quantidade': len(df) if df is not None else 0,
+                'amostra': df.head(5).to_dict(orient='records') if df is not None and not df.empty else None
+            }
+        }
+        
+        return jsonify(debug_info)
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'timestamp': datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        })
 
 if __name__ == '__main__':
     # Configuração para produção
