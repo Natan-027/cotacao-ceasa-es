@@ -10,6 +10,8 @@ import logging
 import io
 import sqlite3
 from fpdf import FPDF
+import requests
+from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
@@ -28,13 +30,297 @@ DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ceasa_db.sql
 def executar_extracao():
     try:
         logger.info("Iniciando extração de dados...")
-        result = subprocess.run(["python3", "ceasa_scraper.py"], 
-                               capture_output=True, text=True, check=True)
-        logger.info("Extração concluída: %s", result.stdout)
-        return True
-    except subprocess.CalledProcessError as e:
-        logger.error("Erro na extração: %s", e.stderr)
+        resultado = extrair_dados_ceasa()
+        if resultado:
+            logger.info(f"Extração concluída com sucesso. {resultado['quantidade_produtos']} produtos extraídos.")
+            return True
+        else:
+            logger.error("Falha na extração de dados.")
+            return False
+    except Exception as e:
+        logger.error(f"Erro na extração: {str(e)}")
         return False
+
+# Função para inicializar o banco de dados SQLite
+def inicializar_banco_dados():
+    """Inicializa o banco de dados SQLite se não existir."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Criar tabela de produtos
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS produtos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        produto TEXT NOT NULL,
+        unidade TEXT NOT NULL,
+        preco_min REAL NOT NULL,
+        preco_medio REAL NOT NULL,
+        preco_max REAL NOT NULL,
+        data_pesquisa TEXT NOT NULL,
+        mercado TEXT NOT NULL,
+        data_extracao TEXT NOT NULL
+    )
+    ''')
+    
+    # Criar tabela de histórico de extrações
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS extracoes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        data_pesquisa TEXT NOT NULL,
+        mercado TEXT NOT NULL,
+        data_extracao TEXT NOT NULL,
+        quantidade_produtos INTEGER NOT NULL,
+        status TEXT NOT NULL
+    )
+    ''')
+    
+    conn.commit()
+    conn.close()
+
+# Função para salvar produtos no banco de dados
+def salvar_no_banco(produtos, data_pesquisa, mercado):
+    """Salva os produtos extraídos no banco de dados SQLite."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    data_extracao = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Inserir produtos
+    for produto in produtos:
+        cursor.execute('''
+        INSERT INTO produtos (produto, unidade, preco_min, preco_medio, preco_max, data_pesquisa, mercado, data_extracao)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            produto['Produto'],
+            produto['Unidade'],
+            produto['Preco_Min'],
+            produto['Preco_Medio'],
+            produto['Preco_Max'],
+            data_pesquisa,
+            mercado,
+            data_extracao
+        ))
+    
+    # Registrar extração
+    cursor.execute('''
+    INSERT INTO extracoes (data_pesquisa, mercado, data_extracao, quantidade_produtos, status)
+    VALUES (?, ?, ?, ?, ?)
+    ''', (data_pesquisa, mercado, data_extracao, len(produtos), "success"))
+    
+    conn.commit()
+    conn.close()
+
+# Nova função para extrair dados usando requests e BeautifulSoup (sem Selenium)
+def extrair_dados_ceasa():
+    """
+    Acessa o site do CEASA, seleciona o mercado CEASA GRANDE VITÓRIA,
+    escolhe a data mais recente e extrai os dados da tabela de preços.
+    Usa requests e BeautifulSoup em vez de Selenium.
+    """
+    # Inicializar banco de dados
+    inicializar_banco_dados()
+    
+    # URL do site do CEASA
+    url = "http://200.198.51.71/detec/filtro_boletim_es/filtro_boletim_es.php"
+    
+    try:
+        # Sessão para manter cookies
+        session = requests.Session()
+        
+        # Passo 1: Acessar a página inicial para obter os mercados disponíveis
+        response = session.get(url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Encontrar o formulário e os parâmetros necessários
+        form = soup.find('form')
+        if not form:
+            logger.error("Formulário não encontrado na página")
+            return None
+        
+        # Encontrar todos os selects
+        selects = form.find_all('select')
+        if len(selects) < 1:
+            logger.error("Select de mercado não encontrado")
+            return None
+        
+        # Obter o nome do parâmetro do select de mercado
+        mercado_select = selects[0]
+        mercado_param = mercado_select.get('name')
+        
+        # Encontrar a opção CEASA GRANDE VITÓRIA
+        mercado_value = None
+        for option in mercado_select.find_all('option'):
+            if "CEASA GRANDE VITÓRIA" in option.text:
+                mercado_value = option.get('value')
+                break
+        
+        if not mercado_value:
+            logger.error("Opção CEASA GRANDE VITÓRIA não encontrada")
+            return None
+        
+        # Passo 2: Enviar o mercado selecionado para obter as datas disponíveis
+        form_data = {mercado_param: mercado_value}
+        response = session.post(url, data=form_data)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Encontrar o select de datas
+        selects = soup.find_all('select')
+        if len(selects) < 2:
+            logger.error("Select de data não encontrado")
+            return None
+        
+        data_select = selects[1]
+        data_param = data_select.get('name')
+        
+        # Obter a primeira data (mais recente)
+        data_options = data_select.find_all('option')
+        if len(data_options) < 2:  # Ignorar a primeira opção (geralmente é um placeholder)
+            logger.error("Nenhuma data disponível")
+            return None
+        
+        data_value = data_options[1].get('value')
+        data_text = data_options[1].text.strip()
+        
+        # Passo 3: Enviar o formulário com mercado e data para obter a tabela de preços
+        form_data = {
+            mercado_param: mercado_value,
+            data_param: data_value
+        }
+        
+        # Encontrar o botão OK e seu parâmetro
+        links = soup.find_all('a')
+        ok_param = None
+        ok_value = None
+        
+        for link in links:
+            if link.text.strip().lower() == "ok":
+                href = link.get('href', '')
+                if 'javascript:' in href:
+                    # Extrair o nome da função JavaScript
+                    js_func = href.split('javascript:')[1].split('(')[0].strip()
+                    # Procurar por inputs hidden que possam conter o parâmetro
+                    hidden_inputs = form.find_all('input', {'type': 'hidden'})
+                    for hidden in hidden_inputs:
+                        if js_func in hidden.get('onclick', ''):
+                            ok_param = hidden.get('name')
+                            ok_value = hidden.get('value', '1')
+                            break
+        
+        if ok_param:
+            form_data[ok_param] = ok_value
+        
+        # Enviar o formulário final
+        response = session.post(url, data=form_data)
+        
+        # Passo 4: Extrair os dados da tabela
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Encontrar todas as tabelas
+        tables = soup.find_all('table')
+        
+        # Encontrar a tabela principal (geralmente a que contém mais linhas)
+        main_table = None
+        max_rows = 0
+        
+        for table in tables:
+            rows = table.find_all('tr')
+            if len(rows) > max_rows:
+                max_rows = len(rows)
+                main_table = table
+        
+        if not main_table:
+            logger.error("Tabela de preços não encontrada")
+            return None
+        
+        # Extrair os dados da tabela
+        produtos = []
+        rows = main_table.find_all('tr')
+        
+        # Pular a primeira linha (cabeçalho)
+        for row in rows[1:]:
+            cols = row.find_all('td')
+            
+            if len(cols) >= 5:
+                produto = cols[0].text.strip()
+                
+                # Verificar se o produto não está vazio e não é um cabeçalho
+                cabecalhos = ["produtos", "embalagem", "min", "m.c.", "max", "situação"]
+                if produto and produto.lower() not in cabecalhos:
+                    unidade = cols[1].text.strip()
+                    preco_min = cols[2].text.strip()
+                    preco_medio = cols[3].text.strip()
+                    preco_max = cols[4].text.strip()
+                    
+                    # Adicionar à lista de produtos
+                    produtos.append({
+                        'Produto': produto,
+                        'Unidade': unidade,
+                        'Preco_Min': preco_min,
+                        'Preco_Medio': preco_medio,
+                        'Preco_Max': preco_max
+                    })
+        
+        logger.info(f"Número de produtos extraídos: {len(produtos)}")
+        
+        # Verificar se temos produtos
+        if not produtos:
+            logger.error("Nenhum produto encontrado na tabela")
+            return None
+        
+        # Filtrar produtos inválidos (como cabeçalhos ou linhas vazias)
+        produtos_filtrados = []
+        for produto in produtos:
+            # Verificar se os campos de preço são numéricos
+            try:
+                preco_min = float(produto['Preco_Min'].replace(',', '.'))
+                preco_medio = float(produto['Preco_Medio'].replace(',', '.'))
+                preco_max = float(produto['Preco_Max'].replace(',', '.'))
+                
+                # Se chegou aqui, os preços são válidos
+                produto['Preco_Min'] = preco_min
+                produto['Preco_Medio'] = preco_medio
+                produto['Preco_Max'] = preco_max
+                produtos_filtrados.append(produto)
+            except (ValueError, TypeError):
+                # Ignorar produtos com preços não numéricos
+                continue
+        
+        logger.info(f"Número de produtos válidos após filtragem: {len(produtos_filtrados)}")
+        
+        # Criar um DataFrame com os dados filtrados
+        df = pd.DataFrame(produtos_filtrados)
+        
+        # Adicionar informações de data e mercado
+        df['Data_Pesquisa'] = data_text
+        df['Mercado'] = "CEASA GRANDE VITÓRIA"
+        
+        # Salvar no banco de dados
+        salvar_no_banco(produtos_filtrados, data_text, "CEASA GRANDE VITÓRIA")
+        
+        # Gerar nome do arquivo com a data atual
+        data_atual = datetime.now().strftime("%Y-%m-%d")
+        nome_arquivo_csv = os.path.join(DATA_DIR, f"ceasa_gv_{data_atual}.csv")
+        nome_arquivo_json = os.path.join(DATA_DIR, f"ceasa_gv_{data_atual}.json")
+        
+        # Salvar os dados em CSV e JSON
+        df.to_csv(nome_arquivo_csv, index=False, encoding='utf-8')
+        df.to_json(nome_arquivo_json, orient='records', force_ascii=False)
+        
+        logger.info(f"Dados extraídos com sucesso para a data {data_text}")
+        logger.info(f"Arquivos salvos em: {nome_arquivo_csv} e {nome_arquivo_json}")
+        
+        return {
+            'data_pesquisa': data_text,
+            'arquivo_csv': nome_arquivo_csv,
+            'arquivo_json': nome_arquivo_json,
+            'quantidade_produtos': len(produtos_filtrados)
+        }
+        
+    except Exception as e:
+        logger.error(f"Erro ao extrair dados: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return None
 
 # Função para obter dados do banco de dados
 def obter_dados_do_banco():
@@ -82,7 +368,7 @@ def obter_dados_do_banco():
         return df
         
     except Exception as e:
-        logger.error("Erro ao obter dados do banco: %s", str(e))
+        logger.error(f"Erro ao obter dados do banco: {str(e)}")
         return None
 
 # Função para obter o arquivo de dados mais recente
@@ -110,7 +396,7 @@ def carregar_dados():
         df = pd.read_csv(arquivo_csv)
         return df
     except Exception as e:
-        logger.error("Erro ao carregar dados: %s", str(e))
+        logger.error(f"Erro ao carregar dados: {str(e)}")
         return None
 
 # Rota principal
