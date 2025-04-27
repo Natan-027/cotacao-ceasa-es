@@ -1,0 +1,295 @@
+{
+    "timestamp": "2025-04-27T15:56:33.544562",
+    "market": "CEASA GRANDE VITÓRIA",
+    "bulletin_date": "25/04/2025",
+    "data": [
+        {
+            "Produtos": "AGRIAO",
+            "Embalagem": "KG",
+            "MIN": 4.55,
+            "M.C.": 4.55,
+            "MAX": 4.55,
+            "Situação": "ME"
+        },
+        {
+            "Produtos": "ALECRIM",
+            "Embalagem": "KG",
+            "MIN": 14.29,
+            "M.C.": 14.29,
+            "MAX": 14.29,
+            "Situação": "ME"
+        },
+        {
+            "Produtos": "ALFACE AMERICANA",
+            "Embalagem": "KG",
+            "MIN": 6.85,
+            "M.C.": 7.22,
+            "MAX": 7.41,
+            "Situação": "MFI"
+        },
+        {
+            "Produtos": "ALFACE CRESPA",
+            "Embalagem": "KG",
+            "MIN": 6.85,
+            "M.C.": 7.22,
+            "MAX": 7.41,
+            "Situação": "MFI"
+        },
+        {
+            "Produtos": "ALFACE LISA",
+            "Embalagem": "KG",
+            "MIN": 6.85,
+            "M.C.": 7.22,
+            "MAX": 7.41,
+            "Situação": "MFI"
+        },
+        {
+            "Produtos": "ALHO PORRO",
+            "Embalagem": "KG",
+            "MIN": 8.7,
+            "M.C.": 8.7,
+            "MAX": 8.7,
+            "Situação": "MFR"
+        },
+        {
+            "Produtos": "ALMEIRAO",
+            "Embalagem": "KG",
+            "MIN": 1.82,
+            "M.C.": 1.82,
+            "MAX": 1.82,
+            "Situação": "ME"
+        },
+        {
+            "Produtos": "BROCOLO COMUM",
+            "Embalagem": "KG",
+            "MIN": 5.26,
+            "M.C.": 5.26,
+            "MAX": 5.26,
+            "Situação": "MFR"
+        },
+        {
+            "Produtos": "BROCOLO NINJA",
+            "Embalagem": "KG",
+            "MIN": 5.83,
+            "M.C.": 5.83,
+            "MAX": 5.83,
+            "Situação": NaN
+        },
+        {
+            "Produtos": "CEBOLINHA",
+            "Embalagem": "KG",
+            "MIN": 5.26,
+            "M.C.": 5.26,
+            "MAX": 5.26,
+            "Situação": "ME"
+        },
+        {
+            "Produtos": "CHICORIA",
+            "Embalagem": "KG",
+            "MIN": 3.45,
+            "M.C.": 3.45,
+            "MAX": 3.45,
+            "Situação": "ME"
+        },
+        {
+            "Produtos": "COENTRO",
+            "Embalagem": "KG",
+            "MIN": 5.26,
+            "M.C.": 5.26,
+            "MAX": 5.26,
+            "Situação": "ME"
+        },
+        {
+            "Produtos": "COUVE",
+            "Embalagem": "KG",
+            "MIN": 4.55,
+            "M.C.": 4.55,
+            "MAX": 4.55,
+            "Situação": "ME"
+        },
+        {
+            "Produtos": "COUVE CHINESA",
+            "Embalagem": "KG",
+            "MIN": 1.47,
+            "M.C.": 1.54,
+            "MAX": 1.59,
+            "Situação": "MFR"
+        },
+        {
+            "Produtos": "COUVE-FLOR BRANCA GRAUDA",
+            "Embalagem": "ENG 08 UNID",
+            "MIN": 50.0,
+            "M.C.": 50.0,
+            "MAX": 50.0,
+            "Situação": "MFI"
+        },
+        {
+            "Produtos": "ESPINAFRE PRIMEIRA",
+            "Embalagem": "KG",
+            "MIN": 4.0,
+            "M.C.": 4.0,
+            "MAX": 4.0,
+            "Situação": "ME"
+        },
+        {
+            "Produtos": "HORTELA",
+            "Embalagem": "KG",
+            "MIN": 9.09,
+            "M.C.": 9.09,
+            "MAX": 9.09,
+            "Situação": "ME"
+        },
+        {
+            "Produtos": "MANJERICAO",
+            "Embalagem": "KG",
+            "MIN": 8.33,
+            "M.C.": 8.33,
+            "MAX": 8.33,
+            "Situação": "ME"
+        },
+        {
+            "Produtos": "MOSTARDA",
+            "Embalagem": "KG",
+            "MIN": 3.57,
+            "M.C.": 3.57,
+            "MAX": 3.57,
+            "Situação": "ME"
+        },
+        {
+            "Produtos": "REPOLHO HIBRIDO EXTRA",
+            "Embalagem": "KG",
+            "MIN": 1.0,
+            "M.C.": 1.02,
+            "MAX": 1.04,
+            "Situação": "MFR"
+        },
+        {
+            "Produtos": "REPOLHO ROXO EXTRA",
+            "Embalagem": "KG",
+            "MIN": 2.17,
+            "M.C.": 2.28,
+            "MAX": 2.39,
+            "Situação": "MFI"
+        },
+        {
+            "Produtos": "RUCULA",
+            "Embalagem": "KG",
+            "MIN": 5.56,
+            "M.C.": 5.56,
+            "MAX": 5.56,
+            "Situação": "ME"
+        },
+        {
+            "Produtos": "SALSA",
+            "Embalagem": "KG",
+            "MIN": 5.88,
+            "M.C.": 5.88,
+            "MAX": 5.88,
+            "Situação": "ME"
+        },
+        {
+            "Produtos": "SALSAO",
+            "Embalagem": "KG",
+            "MIN": 8.33,
+            "M.C.": 8.33,
+            "MAX": 8.33,
+            "Situação": "MFI"
+        },
+        {
+            "Produtos": "SERRALHA",
+            "Embalagem": "KG",
+            "MIN": 3.18,
+            "M.C.": 3.18,
+            "MAX": 3.18,
+            "Situação": "MFR"
+        },
+        {
+            "Produtos": "TAIOBA",
+            "Embalagem": "KG",
+            "MIN": 7.14,
+            "M.C.": 7.14,
+            "MAX": 7.14,
+            "Situação": "ME"
+        },
+        {
+            "Produtos": "ABOBORA JACARE MADURA",
+            "Embalagem": "KG",
+            "MIN": 1.94,
+            "M.C.": 1.94,
+            "MAX": 1.94,
+            "Situação": NaN
+        },
+        {
+            "Produtos": "ABOBORA MARANHAO",
+            "Embalagem": "KG",
+            "MIN": 2.01,
+            "M.C.": 2.01,
+            "MAX": 2.01,
+            "Situação": "ME"
+        },
+        {
+            "Produtos": "ABÃ“BORA JACARE VERDE",
+            "Embalagem": "KG",
+            "MIN": 4.0,
+            "M.C.": 4.0,
+            "MAX": 4.0,
+            "Situação": "MFI"
+        },
+        {
+            "Produtos": "ABOBORA JAPONESA",
+            "Embalagem": "KG",
+            "MIN": 2.01,
+            "M.C.": 2.01,
+            "MAX": 2.01,
+            "Situação": "MFI"
+        },
+        {
+            "Produtos": "ABOBRINHA PRINCESA",
+            "Embalagem": "KG",
+            "MIN": 2.94,
+            "M.C.": 2.94,
+            "MAX": 2.94,
+            "Situação": "MFI"
+        },
+        {
+            "Produtos": "ABOBRINHA ITALIANA EXTRA",
+            "Embalagem": "KG",
+            "MIN": 1.91,
+            "M.C.": 1.98,
+            "MAX": 2.01,
+            "Situação": "MFR"
+        },
+        {
+            "Produtos": "ABOBRINHA MENINA EXTRA",
+            "Embalagem": "KG",
+            "MIN": 2.5,
+            "M.C.": 2.5,
+            "MAX": 2.5,
+            "Situação": NaN
+        },
+        {
+            "Produtos": "BERINJELA EXTRA",
+            "Embalagem": "KG",
+            "MIN": 2.28,
+            "M.C.": 2.33,
+            "MAX": 2.44,
+            "Situação": "MFI"
+        },
+        {
+            "Produtos": "CHUCHU EXTRA",
+            "Embalagem": "KG",
+            "MIN": 0.63,
+            "M.C.": 0.71,
+            "MAX": 0.79,
+            "Situação": "MFI"
+        },
+        {
+            "Produtos": "JILO COMPRIDO EXTRA",
+            "Embalagem": "KG",
+            "MIN": 3.13,
+            "M.C.": 3.3,
+            "MAX": 3.48,
+            "Situação": "MFR"
+        }
+    ]
+}
